@@ -289,9 +289,8 @@ def triton_kernel_fused_experts_with_bias(
         w2_pcg = PrecisionConfig(flex_ctx=FlexCtx(rhs_data=w2_flex))
 
     act = FusedActivation(
-        FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")),
-        (gemm1_alpha, gemm1_clamp_limit),
-        2,
+        FnSpecs("swiglu", swiglu_fn, ("alpha", "limit"), reduction_n=2),
+        (gemm1_alpha, gemm1_clamp_limit)
     )
 
     intermediate_cache = matmul_ogs(
