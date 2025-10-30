@@ -10,11 +10,13 @@ from triton_kernels.matmul_ogs import (
     FlexCtx,
     FnSpecs,
     FusedActivation,
+    GatherIndx,
     PrecisionConfig,
+    RoutingData,
+    ScatterIndx,
     matmul_ogs,
 )
 from triton_kernels.numerics import InFlexData
-from triton_kernels.routing import GatherIndx, RoutingData, ScatterIndx
 from triton_kernels.swiglu import swiglu_fn
 
 if TYPE_CHECKING:

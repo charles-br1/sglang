@@ -56,7 +56,9 @@ if TYPE_CHECKING:
     from sglang.srt.layers.quantization import QuantizationConfig
 
 try:
-    from triton_kernels.routing import GatherIndx, RoutingData, ScatterIndx, routing
+    from triton_kernels.tensor import BIT, SparseMatrix, Bitmatrix, make_ragged_tensor_metadata
+    from triton_kernels.matmul_ogs import GatherIndx, RoutingData, ScatterIndx
+    from triton_kernels.topk import topk
 except ImportError:
     pass
 logger = logging.getLogger(__name__)
@@ -187,6 +189,27 @@ class BypassedTopKOutput(NamedTuple):
 # -------------------------------- TopK ---------------------------------------
 
 
+def legacy_routing_from_bitmatrix(bitmatrix, expt_scal, expt_indx, n_expts_tot, n_expts_act):
+    sparse_logits = SparseMatrix(indx=expt_indx, vals=expt_scal, mask=bitmatrix)
+    dispatch_indx = sparse_logits.mask.metadata.col_sorted_indx
+    combine_indx = sparse_logits.mask.metadata.row_sorted_indx
+    ragged_batch_metadata = make_ragged_tensor_metadata(sparse_logits.mask.metadata.col_sum, dispatch_indx.shape[0])
+    gate_scal = sparse_logits.vals.flatten()[combine_indx]
+    routing_data = RoutingData(gate_scal, ragged_batch_metadata.batch_sizes, n_expts_tot, n_expts_act,
+                               ragged_batch_metadata)
+    gather_idx = GatherIndx(combine_indx, dispatch_indx)
+    scatter_idx = ScatterIndx(dispatch_indx, combine_indx)
+    return routing_data, gather_idx, scatter_idx
+
+
+def legacy_routing(logits, n_expts_act, sm_first=False, expt_indx=None, n_rows=None):
+    if sm_first:
+        logits = torch.softmax(logits, dim=-1)
+    sparse_logits = topk(logits, n_expts_act, apply_softmax=not sm_first, y_indx=expt_indx, n_rows=n_rows)
+    return legacy_routing_from_bitmatrix(sparse_logits.mask, sparse_logits.vals, sparse_logits.indx,
+                                         logits.shape[-1], n_expts_act)
+
+
 class TopK(CustomOp):
 
     def __init__(
@@ -266,7 +289,7 @@ class TopK(CustomOp):
 
         if output_format == TopKOutputFormat.TRITON_KERNEL:
             # renormalize=True is equivalent to sm_first=False
-            routing_data, gather_idx, scatter_idx = routing(
+            routing_data, gather_idx, scatter_idx = legacy_routing(
                 router_logits,
                 self.topk_config.top_k,
                 sm_first=not self.topk_config.renormalize,
