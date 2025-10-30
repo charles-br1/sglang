@@ -52,15 +52,13 @@ from sglang.srt.utils import (
     is_npu,
 )
 
+from triton_kernels.tensor import SparseMatrix, make_ragged_tensor_metadata
+from triton_kernels.matmul_ogs import GatherIndx, RoutingData, ScatterIndx
+from triton_kernels.topk import topk
+
 if TYPE_CHECKING:
     from sglang.srt.layers.quantization import QuantizationConfig
 
-try:
-    from triton_kernels.tensor import BIT, SparseMatrix, Bitmatrix, make_ragged_tensor_metadata
-    from triton_kernels.matmul_ogs import GatherIndx, RoutingData, ScatterIndx
-    from triton_kernels.topk import topk
-except ImportError:
-    pass
 logger = logging.getLogger(__name__)
 
 
@@ -186,9 +184,6 @@ class BypassedTopKOutput(NamedTuple):
         return TopKOutputFormat.BYPASSED
 
 
-# -------------------------------- TopK ---------------------------------------
-
-
 def legacy_routing_from_bitmatrix(bitmatrix, expt_scal, expt_indx, n_expts_tot, n_expts_act):
     sparse_logits = SparseMatrix(indx=expt_indx, vals=expt_scal, mask=bitmatrix)
     dispatch_indx = sparse_logits.mask.metadata.col_sorted_indx
@@ -209,6 +204,7 @@ def legacy_routing(logits, n_expts_act, sm_first=False, expt_indx=None, n_rows=N
     return legacy_routing_from_bitmatrix(sparse_logits.mask, sparse_logits.vals, sparse_logits.indx,
                                          logits.shape[-1], n_expts_act)
 
+# -------------------------------- TopK ---------------------------------------
 
 class TopK(CustomOp):
 
