@@ -935,7 +935,7 @@ class ServerArgs:
                 and quantization_config.get("quant_method") == "mxfp4"
             )
 
-            if is_blackwell_supported() and is_mxfp4_quant_format:
+            if is_blackwell_supported() and is_mxfp4_quant_format and self.moe_runner_backend != "triton_kernel":
                 self.moe_runner_backend = "flashinfer_mxfp4"
                 logger.warning(
                     "Detected SM100 and MXFP4 quantization format for GPT-OSS model, enabling FlashInfer MXFP4 MOE kernel."
